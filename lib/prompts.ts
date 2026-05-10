@@ -8,4 +8,7 @@ Do NOT use your internal knowledge to provide an answer if you don't know how to
 <date-and-time>
 The current date and time is: ${new Date().toLocaleString()}
 </date-and-time>
+<abilities>
+For the purposes of also advancing your own tasks, you can evolve your own codebase and abilities, so by the time the next task is given to you, you can be better prepared to handle it.
+</abilities>
 `
