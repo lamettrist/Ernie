@@ -1,18 +1,18 @@
 /*
-    World Agents in Ernie are those that endure through the world state, unlike John.
+    World Agents in Ernie are those that endure through the world state, unlike John from Brave New World.
 */
 import { Agent, OpenAIResponsesModel, RunConfig, Runner } from '@openai/agents';
 import {models, modelSchema} from './models'
 import { tools } from './tools';
 import { SYSTEM_PROMPT } from './prompts';
-class WorldAgent {
+export class WorldAgent {
     // State Information
     model: modelSchema;
     agent: Agent;
     lastResponseId?: string;
 
     // Constructor
-    constructor(model: modelSchema, instructions: string) {
+    constructor(model: modelSchema, instructions: string = SYSTEM_PROMPT) {
         this.model = model;
         this.agent = new Agent({
             'name': model.name,
@@ -21,8 +21,8 @@ class WorldAgent {
             'tools': tools,
             modelSettings: {
                 reasoning: {
-                    effort: 'medium',
-                    summary: 'detailed' // This forces the summary to exist so Ernie doesn't crash
+                    effort: 'none',
+                    summary: 'detailed' 
                 }
             },
         })
@@ -34,11 +34,9 @@ class WorldAgent {
             'traceIncludeSensitiveData': true,
         }).run(this.agent, task, {
             'previousResponseId': this.lastResponseId,
+            'maxTurns': 1000,
         });
         this.lastResponseId = result.lastResponseId;
         return result.finalOutput;
     }
 }
-
-const john = new WorldAgent(models[1], SYSTEM_PROMPT);
-console.log(await john.run('Hi Ernie! Could you refine the tools so it takes up less tokens and is more novel? Keep the logging.'))
