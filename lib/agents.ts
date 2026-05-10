@@ -41,4 +41,4 @@ class WorldAgent {
 }
 
 const john = new WorldAgent(models[1], SYSTEM_PROMPT);
-console.log(await john.run('Hi Ernie! Could you please help me with conducting a literature review to understand the limitations of LLM-derived agents? Thank you!'))
+console.log(await john.run('Hi Ernie! Could you tell me if you are a novel platform? Try doing a search.'))
