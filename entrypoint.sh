@@ -9,7 +9,7 @@ RELOAD_CODE=42
 echo "[entrypoint] Starting Ernie…"
 
 while true; do
-    bun run lib/agents.ts
+    bun run lib/cli.ts
     EXIT_CODE=$?
 
     if [ "$EXIT_CODE" -eq "$RELOAD_CODE" ]; then

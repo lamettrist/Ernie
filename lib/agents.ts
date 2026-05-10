@@ -1,8 +1,8 @@
 /*
     World Agents in Ernie are those that endure through the world state, unlike John.
 */
-import { Agent, OpenAIResponsesModel, RunConfig, Runner } from '@openai/agents';
-import {models, modelSchema} from './models'
+import { Agent, OpenAIResponsesModel, Runner } from '@openai/agents';
+import { models, modelSchema } from './models'
 import { tools } from './tools';
 import { SYSTEM_PROMPT } from './prompts';
 import { startWatcher } from './watcher';
@@ -11,15 +11,16 @@ import { startWatcher } from './watcher';
 // This must happen before any await so the watcher is live for the entire run.
 startWatcher();
 
-class WorldAgent {
+export class WorldAgent {
     // State Information
     model: modelSchema;
     agent: Agent;
     lastResponseId?: string;
 
     // Constructor
-    constructor(model: modelSchema, instructions: string) {
+    constructor(model: modelSchema, instructions: string, lastResponseId?: string) {
         this.model = model;
+        this.lastResponseId = lastResponseId;
         this.agent = new Agent({
             'name': model.name,
             'instructions': instructions,
@@ -27,8 +28,8 @@ class WorldAgent {
             'tools': tools,
             modelSettings: {
                 reasoning: {
-                    effort: 'none',
-                    summary: 'auto',                
+                    effort: 'medium',
+                    summary: 'auto',
                 }
             },
         })
@@ -37,7 +38,6 @@ class WorldAgent {
     async run(task: string) {
         console.log(`[${this.model.name}] Starting Task: ${task}`);
         const result = await new Runner({
-            'traceIncludeSensitiveData': true,
         }).run(this.agent, task, {
             'previousResponseId': this.lastResponseId,
             'maxTurns': 1000,
@@ -47,5 +47,10 @@ class WorldAgent {
     }
 }
 
-const john = new WorldAgent(models[1], SYSTEM_PROMPT);
-console.log(await john.run('Hi Ernie! This is a pretty weird task for you, but can you make it so if you modify any file related to you, you basically reload? So you can evolve on your own? This would be really helpful for you to be able to get better over time!'))
+// ── Standalone entry-point (bun run lib/agents.ts) ────────────────────────────
+// Only runs when this file is executed directly, not when imported by cli.ts.
+const isMain = process.argv[1]?.endsWith('/lib/agents.ts') || process.argv[1]?.endsWith('\\lib\\agents.ts');
+if (isMain) {
+    const john = new WorldAgent(models[1], SYSTEM_PROMPT);
+    console.log(await john.run('Hi! What can you do?'));
+}

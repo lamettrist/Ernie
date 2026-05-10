@@ -24,6 +24,7 @@ const WATCHED = [
 const ROOT = process.cwd();
 
 let reloadScheduled = false;
+let reloadRequested = false;
 
 /**
  * Starts the file watcher. When a watched path changes the process exits
@@ -36,18 +37,25 @@ export function startWatcher() {
             watch(abs, { recursive: true }, (event, filename) => {
                 if (reloadScheduled) return;
                 reloadScheduled = true;
+                reloadRequested = true;
                 console.log(
                     `\n[watcher] Detected ${event} on ${filename ?? rel} — scheduling reload…`
                 );
-                // Give any pending async work a moment to finish, then exit.
-                setTimeout(() => {
-                    console.log('[watcher] Reloading now (exit code 42).');
-                    process.exit(RELOAD_EXIT_CODE);
-                }, 300);
             });
         } catch {
             // Path may not exist yet (e.g. memories/ before first write) — ignore.
         }
     }
     console.log('[watcher] Hot-reload active. Watching:', WATCHED.join(', '));
+}
+
+export function consumeReloadRequest() {
+    const wasRequested = reloadRequested;
+    reloadRequested = false;
+    reloadScheduled = false;
+    return wasRequested;
+}
+
+export function isReloadRequested() {
+    return reloadRequested;
 }
