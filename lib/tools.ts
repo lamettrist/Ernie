@@ -1,3 +1,6 @@
+/*
+    Note, Ernie made heavy modifications to this file himself!
+*/
 import { tool } from '@openai/agents';
 import { exec } from 'node:child_process';
 import { promises as fs } from 'node:fs';

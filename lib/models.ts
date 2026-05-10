@@ -8,10 +8,6 @@ export interface modelSchema {
     maxTokens?: number;
 }
 
-const digitalOceanProvider = new AsyncOpenAI({
-    apiKey:  process?.env.DIGITALOCEAN_KEY,
-    baseURL: 'https://inference.do-ai.run/v1',
-})
 
 export const hackClubProvider = new AsyncOpenAI({
     apiKey: process?.env.HACKCLUB_KEY,
@@ -20,23 +16,21 @@ export const hackClubProvider = new AsyncOpenAI({
 
 export const models: modelSchema[] = [
     {
-      'name': 'large',
+      'name': 'Ernie-Large',
       'id': 'large',
-      'modelID': 'moonshotai/kimi-k2.6',
+      'modelID': '~anthropic/claude-opus-latest',
       'provider': hackClubProvider,
     },
     {
         'name': 'Ernie-Medium',
         'id': 'medium',
-        'modelID': '~anthropic/claude-sonnet-latest',
+        'modelID': '~openai/gpt-mini-latest',
+        'provider': hackClubProvider,
+    },
+    {
+        'name': 'Ernie-Small',
+        'id': 'small',
+        'modelID': '~anthropic/claude-haiku-latest',
         'provider': hackClubProvider,
     },
 ]
-
-export const getModelById = (id: string): modelSchema | undefined => {
-    return models.find(model => model.id === id);
-}
-
-export const getAvailableModelIds = (): string[] => {
-    return models.map(model => model.id);
-}
