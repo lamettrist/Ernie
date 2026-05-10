@@ -5,258 +5,150 @@ import { resolve, relative, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 
+// ─── Core ────────────────────────────────────────────────────────────────────
+
 const execAsync = promisify(exec);
-const workspaceRoot = process.cwd();
+const ROOT = process.cwd();
+const IGNORED = new Set(['.git', 'node_modules', '.next', 'dist', 'build', '.turbo']);
 
-function resolveWorkspacePath(inputPath: string) {
-    const resolvedPath = resolve(workspaceRoot, inputPath);
-    const normalizedRoot = workspaceRoot.endsWith(sep) ? workspaceRoot : `${workspaceRoot}${sep}`;
+/** Structured tool logger */
+const log = (tool: string, meta: Record<string, unknown> = {}) =>
+    console.log(JSON.stringify({ ts: new Date().toISOString(), tool, ...meta }));
 
-    if (resolvedPath !== workspaceRoot && !resolvedPath.startsWith(normalizedRoot)) {
-        throw new Error(`Path escapes the workspace root: ${inputPath}`);
-    }
+/** Wraps an async fn, returning its error message on failure */
+const safe = async <T>(fn: () => Promise<T>): Promise<T | string> => {
+    try { return await fn(); }
+    catch (e) { return e instanceof Error ? e.message : String(e); }
+};
 
-    return resolvedPath;
+/** Resolves a path relative to ROOT, rejects traversal attempts */
+function safePath(input: string) {
+    const p = resolve(ROOT, input);
+    const base = ROOT.endsWith(sep) ? ROOT : ROOT + sep;
+    if (p !== ROOT && !p.startsWith(base)) throw new Error(`Path escapes workspace: ${input}`);
+    return p;
 }
 
-function formatLines(contents: string, startLine: number, endLine: number) {
-    const allLines = contents.split(/\r?\n/);
-    const safeStart = Math.max(1, startLine);
-    const safeEnd = Math.max(safeStart, endLine);
-
-    return allLines
-        .slice(safeStart - 1, safeEnd)
-        .map((line, index) => `${safeStart + index}: ${line}`)
+/** Returns numbered lines [start, end] from a string */
+function slice(src: string, start: number, end: number) {
+    return src.split(/\r?\n/)
+        .slice(start - 1, end)
+        .map((l, i) => `${start + i}: ${l}`)
         .join('\n');
 }
 
-async function readWorkspaceFile(path: string, lines: number[]) {
-    const filePath = resolveWorkspacePath(path);
-    const contents = await fs.readFile(filePath, 'utf8');
+// ─── File helpers ─────────────────────────────────────────────────────────────
 
-    if (lines.length === 0) {
-        return contents;
-    }
-
-    const [startLine, endLine = startLine] = lines;
-    return formatLines(contents, startLine, endLine);
+async function readFile(path: string, lines: number[]) {
+    const src = await fs.readFile(safePath(path), 'utf8');
+    if (!lines.length) return src;
+    const [s, e = s] = lines;
+    return slice(src, Math.max(1, s), Math.max(1, e));
 }
 
-async function writeWorkspaceFile(path: string, lines: number[], content: string) {
-    const filePath = resolveWorkspacePath(path);
+async function writeFile(path: string, lines: number[], content: string) {
+    const abs = safePath(path);
+    await fs.mkdir(resolve(abs, '..'), { recursive: true });
 
-    if (lines.length === 0) {
-        await fs.mkdir(resolve(filePath, '..'), { recursive: true });
-        await fs.writeFile(filePath, content, 'utf8');
-        return `Wrote ${relative(workspaceRoot, filePath)}`;
+    if (!lines.length) {
+        await fs.writeFile(abs, content, 'utf8');
+        return `Wrote ${relative(ROOT, abs)}`;
     }
 
-    const existingContents = await fs.readFile(filePath, 'utf8').catch(() => '');
-    const existingLines = existingContents.length > 0 ? existingContents.split(/\r?\n/) : [];
-    const [startLine, endLine = startLine] = lines;
-    const startIndex = Math.max(0, startLine - 1);
-    const endIndex = Math.max(startIndex, endLine - 1);
-
-    while (existingLines.length < startIndex) {
-        existingLines.push('');
-    }
-
-    const replacementLines = content.split(/\r?\n/);
-    existingLines.splice(startIndex, endIndex - startIndex + 1, ...replacementLines);
-
-    await fs.mkdir(resolve(filePath, '..'), { recursive: true });
-    await fs.writeFile(filePath, existingLines.join('\n'), 'utf8');
-
-    return `Updated ${relative(workspaceRoot, filePath)} lines ${startLine}-${endLine}`;
+    const existing = (await fs.readFile(abs, 'utf8').catch(() => '')).split(/\r?\n/);
+    const [s, e = s] = lines;
+    const si = Math.max(0, s - 1), ei = Math.max(si, e - 1);
+    while (existing.length < si) existing.push('');
+    existing.splice(si, ei - si + 1, ...content.split(/\r?\n/));
+    await fs.writeFile(abs, existing.join('\n'), 'utf8');
+    return `Updated ${relative(ROOT, abs)} lines ${s}-${e}`;
 }
 
-async function listWorkspaceTree(directoryPath: string, depth = 0, maxDepth = 4): Promise<string> {
-    if (depth > maxDepth) {
-        return '';
-    }
+// ─── Directory helpers ────────────────────────────────────────────────────────
 
-    const entries = await fs.readdir(directoryPath, { withFileTypes: true });
-    const ignored = new Set(['.git', 'node_modules', '.next', 'dist', 'build', '.turbo']);
-    const visibleEntries = entries
-        .filter((entry) => !ignored.has(entry.name))
-        .sort((left, right) => left.name.localeCompare(right.name));
-
-    const lines: string[] = [];
-
-    for (const entry of visibleEntries) {
-        const prefix = '  '.repeat(depth);
-        if (entry.isDirectory()) {
-            lines.push(`${prefix}${entry.name}/`);
-            const childTree = await listWorkspaceTree(resolve(directoryPath, entry.name), depth + 1, maxDepth);
-            if (childTree) {
-                lines.push(childTree);
-            }
+async function tree(dir: string, depth = 0, max = 4): Promise<string> {
+    if (depth > max) return '';
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const rows: string[] = [];
+    for (const e of entries.filter(e => !IGNORED.has(e.name)).sort((a, b) => a.name.localeCompare(b.name))) {
+        const pad = '  '.repeat(depth);
+        if (e.isDirectory()) {
+            rows.push(`${pad}${e.name}/`);
+            const sub = await tree(resolve(dir, e.name), depth + 1, max);
+            if (sub) rows.push(sub);
         } else {
-            lines.push(`${prefix}${entry.name}`);
+            rows.push(`${pad}${e.name}`);
         }
     }
-
-    return lines.join('\n');
+    return rows.join('\n');
 }
 
-async function summarizeWorkspace() {
-    const tree = await listWorkspaceTree(workspaceRoot, 0, 2);
-    const packageJsonPath = resolve(workspaceRoot, 'package.json');
-    const packageJson = await fs.readFile(packageJsonPath, 'utf8').then((text) => JSON.parse(text)).catch(() => undefined);
-
-    const dependencySummary = packageJson?.dependencies
-        ? Object.entries(packageJson.dependencies)
-            .map(([name, version]) => `${name}@${version}`)
-            .join(', ')
-        : 'No package.json dependencies found.';
-
-    return [
-        `Workspace root: ${workspaceRoot}`,
-        `Dependencies: ${dependencySummary}`,
-        'Files:',
-        tree || '(empty)',
-    ].join('\n');
+async function workspaceSummary() {
+    const t = await tree(ROOT, 0, 2);
+    const pkg = await fs.readFile(resolve(ROOT, 'package.json'), 'utf8').then(JSON.parse).catch(() => null);
+    const deps = pkg?.dependencies
+        ? Object.entries(pkg.dependencies).map(([n, v]) => `${n}@${v}`).join(', ')
+        : 'none';
+    return [`Root: ${ROOT}`, `Deps: ${deps}`, 'Files:', t || '(empty)'].join('\n');
 }
+
+// ─── Tools ───────────────────────────────────────────────────────────────────
+
 export const tools = [
     tool({
         name: 'read_file',
-        description: "Reads a file in the environment",
-        parameters: z.object({
-            path: z.string(),
-            lines: z.array(z.number()),
-        }),
-        async execute({ path, lines }) {
-            try {
-                return await readWorkspaceFile(path, lines);
-            } catch (error) {
-                return error instanceof Error ? error.message : String(error);
-            }
+        description: 'Reads a file in the environment',
+        parameters: z.object({ path: z.string(), lines: z.array(z.number()) }),
+        execute: ({ path, lines }) => {
+            log('read_file', { path, lines });
+            return safe(() => readFile(path, lines));
         },
     }),
+
     tool({
         name: 'write_file',
-        description: "Write content to a file in the environment",
-        parameters: z.object({
-            path: z.string(),
-            lines: z.array(z.number()),
-            content: z.string()
-        }),
-        async execute({ path, lines, content }) {
-            console.log(`Data passed: ${path}, lines: ${lines}, content length: ${content.length}`);
-            try {
-                return await writeWorkspaceFile(path, lines, content);
-            } catch (error) {
-                return error instanceof Error ? error.message : String(error);
-            }
+        description: 'Write content to a file in the environment',
+        parameters: z.object({ path: z.string(), lines: z.array(z.number()), content: z.string() }),
+        execute: ({ path, lines, content }) => {
+            log('write_file', { path, lines, contentLength: content.length });
+            return safe(() => writeFile(path, lines, content));
         },
     }),
+
     tool({
         name: 'terminal',
-        description: "View the terminal and run commands",
-        parameters: z.object({
-            command: z.string(),
-        }),
-        async execute({ command }) {
-            console.log(`Data passed: ${command}`);
-            try {
-                const result = await execAsync(command, {
-                    cwd: workspaceRoot,
-                    shell: '/bin/bash',
-                    maxBuffer: 10 * 1024 * 1024,
-                });
-
-                return [
-                    result.stdout?.trimEnd() || '',
-                    result.stderr?.trimEnd() || '',
-                ].filter(Boolean).join('\n');
-            } catch (error) {
-                if (error && typeof error === 'object' && 'stdout' in error && 'stderr' in error) {
-                    const execError = error as { stdout?: string; stderr?: string; code?: number | string };
-                    return [
-                        execError.stdout?.trimEnd() || '',
-                        execError.stderr?.trimEnd() || '',
-                        `Command failed with code: ${execError.code ?? 'unknown'}`,
-                    ].filter(Boolean).join('\n');
+        description: 'View the terminal and run commands',
+        parameters: z.object({ command: z.string() }),
+        execute: ({ command }) => {
+            log('terminal', { command });
+            return safe(async () => {
+                try {
+                    const r = await execAsync(command, { cwd: ROOT, shell: '/bin/bash', maxBuffer: 10 * 1024 * 1024 });
+                    return [r.stdout?.trimEnd(), r.stderr?.trimEnd()].filter(Boolean).join('\n');
+                } catch (e: any) {
+                    return [e.stdout?.trimEnd(), e.stderr?.trimEnd(), `Exit: ${e.code ?? '?'}`].filter(Boolean).join('\n');
                 }
-
-                return error instanceof Error ? error.message : String(error);
-            }
+            });
         },
     }),
+
     tool({
         name: 'compress_context',
         description: 'Compress your context to better fit the window',
-        parameters: z.object(),
-        async execute() {
-            return summarizeWorkspace();
+        parameters: z.object({}),
+        execute: () => {
+            log('compress_context');
+            return safe(workspaceSummary);
         },
     }),
+
     tool({
         name: 'list_files_and_folders',
         description: 'List all files and content in folders within the current environment (DO THIS FIRST)',
         parameters: z.object({}),
-        async execute() {
-            console.log('Listing files and folders in workspace');
-            try {
-                return await listWorkspaceTree(workspaceRoot);
-            } catch (error) {
-                return error instanceof Error ? error.message : String(error);
-            }
+        execute: () => {
+            log('list_files_and_folders');
+            return safe(() => tree(ROOT));
         },
     }),
-]
-
-/* {
-        "type": "function",
-        "name": "read_file",
-        "description": "Reads a file",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The filepath to read the file in the current environment",
-                },
-                "lines": {
-                    "type": "number",
-                    "description": "The specific lines that will be read in the file"
-                }
-            },
-            "required": ["path"],
-        },
-    },
-    {
-        "type": "function",
-        "name": "write_file",
-        "description": "Write content to a file",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path to write to in curent environment",
-                },
-                "content": {
-                    "type": "string",
-                    "description": "The content you are trying to write to the file",
-                },
-                "lines": {
-                    "type": "string",
-                    "description": "The lines to specifically overwrite within a file"
-                }
-            },
-            "required": ["path", "content"],
-        },
-    },
-{
-        "type": "function",
-        "name": "compress_context",
-        "description": "Compresses your context window (and all interactions) so you can continue your objectives.",
-        "parameters": {
-            "type": "object",
-            "properties": {                
-            },
-            "required": [],
-        },
-    },
-*/
+];

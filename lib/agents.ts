@@ -41,4 +41,4 @@ class WorldAgent {
 }
 
 const john = new WorldAgent(models[1], SYSTEM_PROMPT);
-console.log(await john.run('Hi Ernie! Could you make your platform more novel?'))
+console.log(await john.run('Hi Ernie! Could you refine the tools so it takes up less tokens and is more novel? Keep the logging.'))
