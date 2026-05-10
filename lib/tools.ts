@@ -102,9 +102,9 @@ export const tools = [
         name: 'read_file',
         description: 'Reads a file in the environment',
         parameters: z.object({ path: z.string(), lines: z.array(z.number()) }),
-        execute: ({ path, lines }) => {
+        async execute({ path, lines }) {
             log('read_file', { path, lines });
-            return safe(() => readFile(path, lines));
+            return await safe(() => readFile(path, lines));
         },
     }),
 
@@ -112,9 +112,9 @@ export const tools = [
         name: 'write_file',
         description: 'Write content to a file in the environment',
         parameters: z.object({ path: z.string(), lines: z.array(z.number()), content: z.string() }),
-        execute: ({ path, lines, content }) => {
+        async execute({ path, lines, content }) {
             log('write_file', { path, lines, contentLength: content.length });
-            return safe(() => writeFile(path, lines, content));
+            return await safe(() => writeFile(path, lines, content));
         },
     }),
 
@@ -122,9 +122,9 @@ export const tools = [
         name: 'terminal',
         description: 'View the terminal and run commands',
         parameters: z.object({ command: z.string() }),
-        execute: ({ command }) => {
+        async execute({ command }) {
             log('terminal', { command });
-            return safe(async () => {
+            return await safe(async () => {
                 try {
                     const r = await execAsync(command, { cwd: ROOT, shell: '/bin/bash', maxBuffer: 10 * 1024 * 1024 });
                     return [r.stdout?.trimEnd(), r.stderr?.trimEnd()].filter(Boolean).join('\n');
@@ -139,9 +139,9 @@ export const tools = [
         name: 'compress_context',
         description: 'Compress your context to better fit the window',
         parameters: z.object({}),
-        execute: () => {
+        async execute() {
             log('compress_context');
-            return safe(workspaceSummary);
+            return await safe(workspaceSummary);
         },
     }),
 
@@ -149,9 +149,9 @@ export const tools = [
         name: 'list_files_and_folders',
         description: 'List all files and content in folders within the current environment (DO THIS FIRST)',
         parameters: z.object({}),
-        execute: () => {
+        async execute() {
             log('list_files_and_folders');
-            return safe(() => tree(ROOT));
+            return await safe(() => tree(ROOT));
         },
     }),
 ];
