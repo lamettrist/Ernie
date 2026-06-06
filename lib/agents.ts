@@ -19,12 +19,12 @@ export class WorldAgent {
             'instructions': instructions,
             'model': new OpenAIResponsesModel(model.provider, model.modelID),
             'tools': tools,
-            modelSettings: {
-                reasoning: {
-                    effort: 'none',
-                    summary: 'detailed' 
-                }
-            },
+            // modelSettings: {
+            //     reasoning: {
+            //         effort: 'none',
+            //         summary: 'detailed' 
+            //     }
+            // },
         })
     }
 
