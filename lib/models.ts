@@ -1,4 +1,5 @@
 import AsyncOpenAI from 'openai'
+import 'dotenv/config';
 
 export interface modelSchema {
     name: string,
@@ -10,7 +11,7 @@ export interface modelSchema {
 
 
 export const hackClubProvider = new AsyncOpenAI({
-    apiKey: "sk-hc-v1-48a5d08f846147f2b44b761781de9580a622ce80f587400ea00083e09531dab0",
+    apiKey: process.env.HACKCLUB_KEY,
     baseURL: "https://ai.hackclub.com/proxy/v1",
 })
 
