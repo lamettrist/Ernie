@@ -4,12 +4,15 @@
   "description": "Augmented AI agents with tools to interact with the world",
   "main": "lib/agents.ts",
   "bin": {
-    "ernie": "./cli.ts"
+    "ernie": "./dist/ernie-cli"
   },
   "scripts": {
     "start": "bun run cli-ink.tsx",
     "cli": "bun run cli-ink.tsx",
-    "cli:legacy": "bun run cli.ts"
+    "cli:legacy": "bun run cli.ts",
+    "build:cli": "g++ -std=c++17 -O2 -o ./dist/ernie-cli ./cli.cpp",
+    "build:js": "bun build ./ernie-bridge.js --outfile ./dist/ernie-bridge.js",
+    "build": "npm run build:js && npm run build:cli"
   },
   "dependencies": {
     "@openai/agents": "^0.11.1",

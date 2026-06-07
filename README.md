@@ -1,41 +1,112 @@
 # Ernie
+
 <i>Augmented LLM-derived agents with unrestricted access to the tools necessary to interact with the world.</i>
 
-<details>
-<summary><strong>Why am I making this?</strong></summary>
-<br>
-Ever since I saw the creation of a World environment for agents to interact and communicate on LinkedIn, I was curious if it would be possible for a agent to take the steps necessary to evolve and interact with the real-world with a lack of restrictions (apart from following legal principles) to act on its goals. That's why Ernie exists.
-</details>
-<br>
+## What is this?
 
-<details>
-<summary><strong>Isn't this dangerous?</strong></summary>
-<br />
-Much like a Copilot, yes, if it encounters malicious instructions on the internet or degrades in performance which causes risks since it executes tasks, so we recommend isolating this bot in a virtual environment (like GitHub Codespaces) before continuing to interact with the agent. 
-<br />
-</details>
+Ernie is an agent platform that wraps OpenAI-compatible models with a tool-using runtime and a very small CLI bridge.
 
+The current CLI flow is:
 
-## Setup
+1. A C++ binary writes a request JSON file.
+2. The binary launches exactly one JavaScript file with Bun.
+3. The JavaScript bridge creates a `WorldAgent` and runs the prompt.
+4. The agent can use tools like file reads/writes, terminal commands, directory listing, and context compression.
+5. The bridge writes a response JSON file.
+6. The C++ binary prints the response.
 
-Required Dependencies:
+## Requirements
 
-* Bun
-* HackClub AI Platform API Key
+- Bun
+- A valid API key for the model provider configured in `lib/models.ts`
+- A C++17 compiler such as `g++`
 
-Setup Instructions:
-1. Get a API Key from HackClub (or use any AI platform you wish and modify models.ts to leverage said platform)
-2. Put your API Key in .env (HackClub with the format seen in .env.example)
-3. Run ``bun install`` and then interact with it using the example format!
+## Project layout
 
-## Examples
+- `cli.cpp` — C++ CLI wrapper
+- `ernie-bridge.js` — Bun entrypoint used by the CLI
+- `lib/agents.ts` — `WorldAgent` wrapper around `@openai/agents`
+- `lib/tools.ts` — tools exposed to the agent
+- `lib/models.ts` — model definitions
+- `lib/prompts.ts` — system prompt
+- `dist/` — build output
 
-Interaction:
-```js
-import { WorldAgent } from "./lib/agents.ts";
-import { models } from "./lib/models.ts";
-const john = new WorldAgent(models[1]); // the one in .env
-console.log(await john.run("Hi Ernie! Could you refine the tools seen in tools.ts to suit your functionality better?"));
+## Available models
+
+The CLI currently supports the model IDs defined in `lib/models.ts`:
+
+- `large` → `Ernie-Large`
+- `medium` → `Ernie-Medium`
+- `small` → `Ernie-Small`
+
+If no model is passed, the CLI defaults to `medium`.
+
+## Build
+
+```bash
+npm run build
 ```
 
-Refer to the example.ts folder for more examples about what Ernie can do.
+This runs:
+
+- `bun build ./ernie-bridge.js --outfile ./dist/ernie-bridge.js`
+- `g++ -std=c++17 -O2 -o ./dist/ernie-cli ./cli.cpp`
+
+## Run the CLI
+
+From the repo root:
+
+```bash
+./dist/ernie-cli ./ernie-bridge.js "Hello Ernie"
+```
+
+Optional model selection:
+
+```bash
+./dist/ernie-cli ./ernie-bridge.js "Hello Ernie" small
+```
+
+You can also point the binary at the bundled JavaScript artifact if you built it and want to use that instead:
+
+```bash
+./dist/ernie-cli ./dist/ernie-bridge.js "Hello Ernie"
+```
+
+## Request / response format
+
+The C++ binary passes a JSON request to the JS bridge with these fields:
+
+- `prompt`
+- `model`
+- `cwd`
+- `responsePath`
+- `requestPath`
+
+The JS bridge returns JSON shaped like:
+
+```json
+{
+  "ok": true,
+  "model": "Ernie-Medium",
+  "prompt": "Hello Ernie",
+  "output": "...",
+  "cwd": "/path/to/repo"
+}
+```
+
+## Tools available to the agent
+
+The agent can use these tools from `lib/tools.ts`:
+
+- `list_files_and_folders` — inspect the workspace tree
+- `read_file` — read files, optionally by line range
+- `write_file` — create or update files
+- `terminal` — run shell commands in the workspace
+- `compress_context` — summarize the workspace state
+
+## Notes
+
+- The C++ binary only ever launches one JavaScript file.
+- The JavaScript bridge instantiates `WorldAgent` and runs the prompt.
+- The agent is expected to inspect the workspace first, then use tools as needed.
+- If you want to extend the CLI, update the JS bridge or the C++ wrapper separately.
