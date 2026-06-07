@@ -2,7 +2,7 @@
     World Agents in Ernie are those that endure through the world state, unlike John from Brave New World.
 */
 import { Agent, OpenAIResponsesModel, RunConfig, Runner } from '@openai/agents';
-import {models, modelSchema} from './models'
+import {modelSchema} from './models'
 import { tools } from './tools';
 import { SYSTEM_PROMPT } from './prompts';
 export class WorldAgent {
